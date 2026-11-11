@@ -12,4 +12,6 @@ opt-level = 3
 [package.metadata.android]
 package_name = "com.example.castledefense"
 label = "Castle Defense"
-orientation = "landscape"
+
+[package.metadata.android.activity_attributes]
+"android:screenOrientation" = "landscape"
