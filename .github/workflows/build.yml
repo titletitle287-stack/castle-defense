@@ -9,6 +9,12 @@ jobs:
     container: notfl3/cargo-apk
     steps:
       - uses: actions/checkout@v4
+      - name: Update Rust
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup target add armv7-linux-androideabi aarch64-linux-android
+          rustc --version
       - name: Build
         run: cargo quad-apk build --release
       - uses: actions/upload-artifact@v4
