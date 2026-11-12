@@ -1,6 +1,6 @@
 use macroquad::prelude::*;
 
-const BASE_H: f32 = 540.0; // логическая высота экрана
+const BASE_H: f32 = 540.0;
 const CASTLE_W: f32 = 110.0;
 const CASTLE_H: f32 = 140.0;
 const GROUND: f32 = 420.0;
@@ -77,13 +77,13 @@ impl Game {
             castle_max: 100.0,
             gold: 0,
             wave: 1,
-            to_spawn: 5,
-            spawn_t: 1.0,
+            to_spawn: 80,
+            spawn_t: 0.5,
             break_t: 3.0,
             shoot_cd: 0.0,
             t: 0.0,
-            dmg_lvl: 0,
-            rate_lvl: 0,
+            dmg_lvl: 100,
+            rate_lvl: 100,
             kills: 0,
             over: false,
             lw: 960.0,
@@ -127,7 +127,7 @@ impl Game {
     }
 
     fn cooldown(&self) -> f32 {
-        (0.55 * 0.9f32.powi(self.rate_lvl as i32)).max(0.12)
+        (0.55 * 0.9f32.powi(self.rate_lvl as i32)).max(0.03)
     }
 
     fn spawn_enemy(&mut self) {
@@ -141,19 +141,13 @@ impl Game {
         };
         let kd = kind(k);
         let hp = kd.hp * (1.0 + 0.12 * (self.wave as f32 - 1.0));
-        self.enemies.push(Enemy { x: self.lw + 30.0, hp, max_hp: hp, kind: k, cd: 0.5, hit: 0.0 });
+        let x = self.lw + 30.0 + rand::gen_range(0.0, 150.0);
+        self.enemies.push(Enemy { x, hp, max_hp: hp, kind: k, cd: 0.5, hit: 0.0 });
     }
 
     fn update(&mut self, dt: f32, u: f32) {
         let (mx, my) = mouse_position();
         let (mx, my) = (mx / u, my / u);
-
-        if self.over {
-            if is_mouse_button_pressed(MouseButton::Left) || is_key_pressed(KeyCode::Space) {
-                *self = Game::new();
-            }
-            return;
-        }
 
         self.t += dt;
 
@@ -193,7 +187,7 @@ impl Game {
         for a in self.arrows.iter_mut() {
             a.v.y += 500.0 * dt;
             a.p += a.v * dt;
-            if a.p.y > GROUND || a.p.x > self.lw + 50.0 || a.p.x < -50.0 || a.p.y < -300.0 {
+            if a.p.y > GROUND || a.p.x > self.lw + 200.0 || a.p.x < -50.0 || a.p.y < -300.0 {
                 a.alive = false;
                 continue;
             }
@@ -207,7 +201,7 @@ impl Game {
                     e.hp -= a.dmg;
                     e.hit = 0.08;
                     a.alive = false;
-                    for _ in 0..6 {
+                    for _ in 0..3 {
                         self.parts.push(Particle {
                             p: a.p,
                             v: vec2(rand::gen_range(-80.0, 80.0), rand::gen_range(-120.0, 0.0)),
@@ -221,29 +215,16 @@ impl Game {
         }
         self.arrows.retain(|a| a.alive);
 
-        // --- враги ---
+        // --- враги (замок неуязвим) ---
         for e in self.enemies.iter_mut() {
             let kd = kind(e.kind);
             e.hit = (e.hit - dt).max(0.0);
             let stop_x = CASTLE_W + kd.w / 2.0;
             if e.x > stop_x {
                 e.x -= kd.speed * dt;
-            } else {
-                e.cd -= dt;
-                if e.cd <= 0.0 {
-                    self.castle_hp -= kd.dmg;
-                    e.cd = 1.0;
-                    for _ in 0..4 {
-                        self.parts.push(Particle {
-                            p: vec2(CASTLE_W, GROUND - rand::gen_range(10.0, 100.0)),
-                            v: vec2(rand::gen_range(-60.0, 60.0), rand::gen_range(-100.0, -10.0)),
-                            life: 0.5,
-                            c: Color::new(0.6, 0.6, 0.65, 1.0),
-                        });
-                    }
-                }
             }
         }
+        self.castle_hp = self.castle_max;
 
         // --- смерть врагов ---
         let mut dead: Vec<(f32, usize)> = vec![];
@@ -257,7 +238,7 @@ impl Game {
             let kd = kind(k);
             self.gold += kd.reward;
             self.kills += 1;
-            for _ in 0..12 {
+            for _ in 0..5 {
                 self.parts.push(Particle {
                     p: vec2(x, GROUND - kd.h / 2.0),
                     v: vec2(rand::gen_range(-120.0, 120.0), rand::gen_range(-200.0, -20.0)),
@@ -281,21 +262,16 @@ impl Game {
             if self.spawn_t <= 0.0 {
                 self.spawn_enemy();
                 self.to_spawn -= 1;
-                self.spawn_t = rand::gen_range(0.5, 1.4) / (1.0 + 0.05 * self.wave as f32);
+                self.spawn_t = rand::gen_range(0.04, 0.2) / (1.0 + 0.05 * self.wave as f32);
             }
         } else if self.enemies.is_empty() {
             self.break_t -= dt;
             if self.break_t <= 0.0 {
                 self.wave += 1;
-                self.to_spawn = 4 + self.wave * 3;
+                self.to_spawn = 80 + self.wave * 40;
                 self.break_t = 3.0;
                 self.gold += 10;
             }
-        }
-
-        if self.castle_hp <= 0.0 {
-            self.castle_hp = 0.0;
-            self.over = true;
         }
     }
 
@@ -330,10 +306,8 @@ impl Game {
         }
         r(CASTLE_W / 2.0 - 16.0, GROUND - 46.0, 32.0, 46.0, Color::new(0.25, 0.15, 0.08, 1.0));
 
-        // полоска HP замка
-        let frac = (self.castle_hp / self.castle_max).clamp(0.0, 1.0);
-        r(10.0, cy - 40.0, CASTLE_W - 20.0, 8.0, Color::new(0.5, 0.1, 0.1, 1.0));
-        r(10.0, cy - 40.0, (CASTLE_W - 20.0) * frac, 8.0, Color::new(0.2, 0.8, 0.3, 1.0));
+        // полоска HP замка (всегда полная)
+        r(10.0, cy - 40.0, CASTLE_W - 20.0, 8.0, Color::new(0.2, 0.8, 0.3, 1.0));
 
         // лучник
         let hx = 62.0;
@@ -377,9 +351,9 @@ impl Game {
         text(&format!("Gold: {}", self.gold), 12.0, 28.0, 28.0, Color::new(1.0, 0.85, 0.2, 1.0));
         text(&format!("Wave: {}", self.wave), 12.0, 56.0, 28.0, WHITE);
         text(&format!("Kills: {}", self.kills), 12.0, 84.0, 24.0, LIGHTGRAY);
-        text(&format!("Castle: {:.0}/{:.0}", self.castle_hp, self.castle_max), 12.0, 110.0, 24.0, Color::new(0.5, 0.9, 0.5, 1.0));
+        text("Castle: infinite HP", 12.0, 110.0, 24.0, Color::new(0.5, 0.9, 0.5, 1.0));
 
-        if self.to_spawn == 0 && self.enemies.is_empty() && !self.over {
+        if self.to_spawn == 0 && self.enemies.is_empty() {
             let s = "Wave cleared!";
             let w = measure_text(s, None, (30.0 * u) as u16, 1.0).width / u;
             text(s, self.lw / 2.0 - w / 2.0, 150.0, 30.0, Color::new(0.6, 1.0, 0.6, 1.0));
@@ -396,22 +370,6 @@ impl Game {
             let title = if i < 2 { format!("{} Lv{}", labels[i], levels[i]) } else { labels[i].to_string() };
             text(&title, rc.x + 10.0, rc.y + 32.0, 24.0, WHITE);
             text(&format!("Cost: {}", self.cost(i)), rc.x + 10.0, rc.y + 62.0, 24.0, if can { Color::new(1.0, 0.85, 0.2, 1.0) } else { GRAY });
-        }
-
-        // экран поражения
-        if self.over {
-            r(0.0, 0.0, self.lw, BASE_H, Color::new(0.0, 0.0, 0.0, 0.7));
-            let lines = [
-                ("GAME OVER".to_string(), 60.0),
-                (format!("Wave {}  |  Kills {}", self.wave, self.kills), 30.0),
-                ("Tap to restart".to_string(), 28.0),
-            ];
-            let mut y = 200.0;
-            for (s, size) in lines.iter() {
-                let w = measure_text(s, None, (*size * u) as u16, 1.0).width / u;
-                text(s, self.lw / 2.0 - w / 2.0, y, *size, WHITE);
-                y += size + 20.0;
-            }
         }
     }
 }
@@ -437,4 +395,4 @@ async fn main() {
         g.draw(u);
         next_frame().await;
     }
-  }
+         }
